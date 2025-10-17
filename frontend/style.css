@@ -1,0 +1,69 @@
+:root { color-scheme: light dark; }
+
+body {
+  font-family: system-ui, sans-serif;
+  margin: 0;
+  background: #fafafa;
+}
+
+main {
+  max-width: 700px;
+  margin: 2rem auto;
+  padding: 1rem;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+#history {
+  min-height: 320px;
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  background: white;
+  border-radius: 10px;
+  overflow-y: auto;
+}
+
+.message {
+  margin: 0.5rem 0;
+  line-height: 1.4;
+}
+
+.message.assistant {
+  color: teal;
+}
+
+.message.user {
+  color: #333;
+}
+
+form {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+input {
+  flex: 1;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+}
+
+button {
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  background: #222;
+  color: white;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
