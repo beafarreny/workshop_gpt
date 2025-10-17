@@ -9,13 +9,13 @@ from dotenv import load_dotenv
 
 from app.schemas.chat import Message, ChatIn
 from app.utils.storage import load_history, save_history
-from app.agents.briggie_gpt import agent  # 👈 nuevo import
+from app.agents.briggie_mistral import stream_mistral  # ✅ import correcto
 
 # ==== CONFIGURACIÓN ====
 load_dotenv()
 FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://127.0.0.1:5500")
 
-app = FastAPI(title="Briggie GPT (pydantic_ai version)")
+app = FastAPI(title="Briggie Mistral Online")
 
 # ==== CORS ====
 app.add_middleware(
@@ -26,13 +26,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ==== HISTORIAL ====
+# ==== HISTORIAL EN MEMORIA (SIN SQL) ====
 HISTORY: Dict[str, List[Message]] = {}
 raw_data = load_history()
 for user_id, msgs in raw_data.items():
     HISTORY[user_id] = [Message(**m) for m in msgs]
 
+
 def _ensure_user(user_id: str) -> List[Message]:
+    """Asegura que el usuario tenga un historial inicializado."""
     if user_id not in HISTORY:
         HISTORY[user_id] = []
     return HISTORY[user_id]
@@ -42,16 +44,23 @@ def _ensure_user(user_id: str) -> List[Message]:
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "provider": f"openai:{os.getenv('OPENAI_MODEL', 'gpt-4o-mini')}", "mode": "online"}
+    """Devuelve el estado del backend y el modelo activo."""
+    return {
+        "status": "ok",
+        "provider": f"mistral:{os.getenv('MISTRAL_MODEL', 'mistral-small-latest')}",
+        "mode": "online",
+    }
 
 
 @app.get("/chat-system/chat/{user_id}")
 async def get_chat(user_id: str):
+    """Devuelve el historial completo del usuario."""
     return _ensure_user(user_id)
 
 
 @app.post("/chat-system/chat/{user_id}")
 async def post_chat(user_id: str, body: ChatIn):
+    """Guarda un nuevo mensaje del usuario y actualiza el JSON."""
     msgs = _ensure_user(user_id)
     msg = Message(role="user", content=body.content)
     msgs.append(msg)
@@ -61,14 +70,27 @@ async def post_chat(user_id: str, body: ChatIn):
 
 @app.post("/chat-system/chat-streaming/{user_id}")
 async def chat_stream(user_id: str, body: ChatIn):
+    """
+    Envía el mensaje del usuario al modelo Mistral (API Online),
+    recibe la respuesta por streaming y la guarda en el JSON.
+    """
     msgs = _ensure_user(user_id)
+    system_prompt = Message(
+        role="system",
+        content=(
+            "You are Briggie, a compassionate medical assistant speaking fluent English. "
+            "Be empathetic, clear, and informative. "
+            "Always explain medical concepts simply and encourage professional consultation when necessary."
+        ),
+    )
+    full_messages = [system_prompt] + msgs + [Message(role="user", content=body.content)]
 
     async def token_generator():
-        # 🔥 Usa pydantic_ai para ejecutar el modelo
-        response = await agent.run(body.content)
-        text = str(response.output)
-        msgs.append(Message(role="assistant", content=text))
+        assistant_text = ""
+        async for delta in stream_mistral(full_messages):
+            assistant_text += delta
+            yield delta
+        msgs.append(Message(role="assistant", content=assistant_text))
         save_history({k: [m.model_dump() for m in v] for k, v in HISTORY.items()})
-        yield text
 
     return StreamingResponse(token_generator(), media_type="text/plain")
